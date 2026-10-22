@@ -6,9 +6,11 @@ int setShavedChance
 int setNormalChance
 int setStylishChance
 int setHairyChance
+int setEnableMales
 int setPubeCycleKey
 int setResetBodyDistribution
 int setPubeActor
+int setPubeSlot
 
 string[] pubeTypeList
 string[] obodyManualChangeBehaviours
@@ -45,6 +47,10 @@ event OnPageReset(string page)
 
 	setOBodyManualChangeBehaviour = AddMenuOption("$opubes_option_obody_manual_behaviour", obodyManualChangeBehaviours[OPubes.OBodyManualChangeBehaviour])
 
+	setPubeSlot = AddSliderOption("$opubes_option_pube_slot", OPubes.SlotToUse)
+
+	AddEmptyOption()
+
 	setShavedChance = AddSliderOption("$opubes_option_shaved_chance", OPubes.ShavedChance)
 	setNormalChance = AddSliderOption("$opubes_option_normal_chance", OPubes.NormalChance)
 	setStylishChance = AddSliderOption("$opubes_option_stylish_chance", OPubes.StylishChance)
@@ -52,9 +58,13 @@ event OnPageReset(string page)
 
 	AddEmptyOption()
 
-	setPubeCycleKey = AddKeyMapOption("$opubes_option_pube_cycle_key", OPubes.PubesCycleKey)
+	setEnableMales = AddToggleOption("$opubes_option_enable_males", OPubes.EnableMales)
 
 	AddEmptyOption()
+
+	setPubeCycleKey = AddKeyMapOption("$opubes_option_pube_cycle_key", OPubes.PubesCycleKey)
+
+	SetCursorPosition(1)
 
 	Actor actorInCrosshair = Game.GetCurrentCrosshairRef() as Actor
 
@@ -72,6 +82,16 @@ event OnPageReset(string page)
 		endif
 	endif
 endEvent
+
+
+Event OnOptionSelect(int option)
+	if (option == setEnableMales)
+		OPubes.EnableMales = !OPubes.EnableMales
+		SetToggleOptionValue(setEnableMales, OPubes.EnableMales)
+
+		OPubes.GeneratePubicHairLists()
+	endif
+EndEvent
 
 
 Event OnOptionSliderOpen(int option)
@@ -98,6 +118,12 @@ Event OnOptionSliderOpen(int option)
 		SetSliderDialogDefaultValue(25.0)
 		SetSliderDialogRange(0.0, 100.0)
 		SetSliderDialogInterval(1.0)
+
+	elseif (option == setPubeSlot)
+		SetSliderDialogStartValue(OPubes.SlotToUse)
+		SetSliderDialogDefaultValue(0.0)
+		SetSliderDialogRange(0.0, (NiOverride.GetNumBodyOverlays() - 1))
+		SetSliderDialogInterval(1.0)
 	endIf
 EndEvent
 
@@ -118,6 +144,10 @@ Event OnOptionSliderAccept(int option, float value)
 	elseif (option == setHairyChance)
 		OPubes.HairyChance = value as int
 		SetSliderOptionValue(setHairyChance, OPubes.HairyChance)
+
+	elseif (option == setPubeSlot)
+		OPubes.SlotToUse = value as int
+		SetSliderOptionValue(setPubeSlot, OPubes.SlotToUse)
 	endIf
 EndEvent
 
@@ -185,8 +215,12 @@ event OnOptionHighlight(int option)
 		SetInfoText("$opubes_highlight_stylish_chance")
 	elseif (option == setHairyChance)
 		SetInfoText("$opubes_highlight_hairy_chance")
+	elseif (option == setEnableMales)
+		SetInfoText("$opubes_highlight_enable_males")
 	elseif (option == setPubeCycleKey)
 		SetInfoText("$opubes_highlight_cycle_key")
+	elseif (option == setPubeSlot)
+		SetInfoText("$opubes_highlight_pube_slot")
 	elseif (option == setPubeActor)
 		SetInfoText("$opubes_highlight_pube_actor")
 	endif

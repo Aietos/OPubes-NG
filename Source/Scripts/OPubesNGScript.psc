@@ -19,17 +19,27 @@ Int property HairyChance auto
 
 Int property OBodyManualChangeBehaviour auto
 
+Int property SlotToUse auto
+
+bool property EnableMales auto
+
 Message property ChangePubesMessage auto
 
-string[] Shaved
-string[] Normal
-string[] Stylish
-string[] Hairy
+int Normal
+int Stylish
+int Hairy
+
+int NormalMale
+int StylishMale
+int HairyMale
 
 string OPubeskey = "opu"
 string OPubesSlot = "op_slt"
 
-int TotalPubes
+int TotalPubesFemale
+int TotalPubesMale
+
+bool OStimInstalled
 
 
 ; ███████╗██╗   ██╗███████╗███╗   ██╗████████╗███████╗
@@ -47,11 +57,6 @@ Event OnInit()
 
 	RegisterForKey(PubesCycleKey)
 
-	Stylish = PapyrusUtil.StringArray(0)
-	Normal = PapyrusUtil.StringArray(0)
-	Hairy = PapyrusUtil.StringArray(0)
-	Shaved = PapyrusUtil.StringArray(1, "hairless")
-
 	OnLoad()
 
 	debug.notification("OPubes NG installed")
@@ -67,6 +72,8 @@ Function OnLoad()
 
 	OBodyNative.RegisterForOBodyRemovingClothesEvent(Self as Quest)
 	RegisterForModEvent("obody_manualchange", "OnManualChange")
+
+	OStimInstalled = Game.IsPluginInstalled("OStim.esp")
 EndFunction
 
 
@@ -91,7 +98,7 @@ EndEvent
 Event OnManualChange(Form Act)
 	Actor actorChanged = Act as Actor
 
-	if actorChanged != PlayerRef && IsFemale(actorChanged)
+	if actorChanged != PlayerRef && (IsFemale(actorChanged) || EnableMales)
 		if OBodyManualChangeBehaviour == 0
 			return
 		elseif OBodyManualChangeBehaviour == 1
@@ -123,7 +130,7 @@ EndFunction
 
 Function ChangeActorPubes(Actor Act, String PubesTexture = "", Bool IgnorePlayer = True)
 	if GetNPCDataBool(Act, OPubeskey)
-		RemovePubes(Act)
+		RemovePubes(Act, IsFemale(Act))
 	endif
 
 	Process(Act, PubesTexture, IgnorePlayer)
@@ -133,41 +140,49 @@ EndFunction
 Function UpdateActorPubes(Actor Act, String PubesType)
 	string texture
 
+	bool isActFemale = IsFemale(Act)
+
 	If PubesType != "Shaved"
-		texture = GetPubeTextForType(PubesType)
+		texture = GetPubeTextForType(PubesType, isActFemale)
 
 		if texture != ""
 			ChangeActorPubes(Act, texture, false)
 		endif
 	else
-		RemovePubes(Act)
+		RemovePubes(Act, isActFemale)
 		StoreNPCDataBool(Act, OPubeskey, true)
 	endif
 EndFunction
 
 
 Function Process(actor Act, String PubesTexture = "", Bool IgnorePlayer = True)
-	if IsFemale(Act)
+	bool isActFemale = IsFemale(Act)
+
+	if (isActFemale && TotalPubesFemale > 0) || (EnableMales && TotalPubesMale > 0)
 		if GetNPCDataBool(Act, OPubesKey)
-			NiOverride.AddOverlays(Act)
+			; this if is needed to not mess up overlays added by other mods
+			if !NiOverride.HasOverlays(Act) && (!OStimInstalled || !OActor.IsInOStim(Act))
+				; this is needed so that overlays stay between save reloads
+				NiOverride.AddOverlays(Act)
+			endif
 		elseif (Act != PlayerRef || (Act == PlayerRef && !IgnorePlayer))
 			StoreNPCDataBool(Act, OPubeskey, true)
 
 			string texture
 
 			if PubesTexture == ""
-				texture = GetPubeTexForNPC(Act)
+				texture = GetPubeTexForNPC(Act, isActFemale)
 			else
 				texture = PubesTexture
 			endif
 
 			if texture != ""
-				ApplyOverlay(Act, texture)
+				ApplyOverlay(Act, texture, isActFemale)
 
 				if ChanceRoll(75)
-					ColorPubes(Act, GetLightHairColor(Act))
+					ColorPubes(Act, GetLightHairColor(Act), isActFemale)
 				else
-					ColorPubes(Act, ColorComponent.SetValue(0x0, Utility.RandomFloat(0.06, 0.38)))
+					ColorPubes(Act, ColorComponent.SetValue(0x0, Utility.RandomFloat(0.06, 0.38)), isActFemale)
 				endif
 			endif
 		endif
@@ -175,65 +190,93 @@ Function Process(actor Act, String PubesTexture = "", Bool IgnorePlayer = True)
 EndFunction
 
 
-String Function GetPubeTextForType(String PubesType)
-	if PubesType == "Normal" && Normal.length > 0
-		return Normal[Utility.RandomInt(0, Normal.Length - 1)]
-	elseif PubesType == "Stylish" && Stylish.length > 0
-		return Stylish[Utility.RandomInt(0, Stylish.Length - 1)]
-	elseif PubesType == "Hairy" && Hairy.length > 0
-		return Hairy[Utility.RandomInt(0, Hairy.Length - 1)]
+String Function GetPubeTextForType(String PubesType, bool isActFemale)
+	int normalArray = Normal
+	int stylishArray = Stylish
+	int hairyArray = Hairy
+
+	if !IsActFemale
+		normalArray = NormalMale
+		stylishArray = StylishMale
+		hairyArray = HairyMale
+	endif
+
+	int normalLength = JArray.count(normalArray)
+	int stylishLength = JArray.count(stylishArray)
+	int hairyLength = JArray.count(hairyArray)
+
+	if PubesType == "Normal" && normalLength > 0
+		return JArray.getStr(normalArray, Utility.RandomInt(0, normalLength - 1))
+	elseif PubesType == "Stylish" && stylishLength > 0
+		return JArray.getStr(stylishArray, Utility.RandomInt(0, stylishLength - 1))
+	elseif PubesType == "Hairy" && hairyLength > 0
+		return JArray.getStr(hairyArray, Utility.RandomInt(0, hairyLength - 1))
 	endif
 
 	return ""
 EndFunction
 
 
-string Function GetPubeTexForNPC(actor npc)
-	string[] type = GetHairType(npc)
+string Function GetPubeTexForNPC(actor npc, bool isActFemale)
+	int type = GetHairType(npc, isActFemale)
 
-	if type == Shaved || type.length == 0
-		return ""
-	else
-		return type[Utility.RandomInt(0, type.Length - 1)]
+	if type != -1
+		int typeLength = JArray.count(type)
+
+		if typeLength > 0
+			return JArray.getStr(type, Utility.RandomInt(0, typeLength - 1))
+		endif
 	endif
+
+	return ""
 EndFunction
 
 
-string[] Function GetHairType(Actor Npc)
+int Function GetHairType(Actor Npc, bool IsActFemale)
 	Race npcRace = Npc.GetLeveledActorBase().GetRace()
 
 	if npcRace.HasKeyword(IsBeastRace)
-		return Shaved
+		return -1
+	endif
+
+	int normalArray = Normal
+	int stylishArray = Stylish
+	int hairyArray = Hairy
+
+	if !IsActFemale
+		normalArray = NormalMale
+		stylishArray = StylishMale
+		hairyArray = HairyMale
 	endif
 
 	if StringContains(npcRace.GetName(), "orc")
 		if ChanceRoll(75)
-			return Hairy
+			return hairyArray
 		elseif ChanceRoll(50)
-			return Normal
+			return normalArray
 		elseif ChanceRoll(15)
-			return Stylish
+			return stylishArray
 		else
-			return Shaved
+			return -1
 		endif
 	endif
 
 	if npcRace.HasKeyword(vampire)
 		if chanceRoll(50)
-			return Stylish
+			return stylishArray
 		elseif ChanceRoll(30)
-			return Shaved
+			return -1
 		else
-			return Normal
+			return normalArray
 		endif
 	elseif npc.IsInFaction(Banditfaction) || npc.IsInFaction(Forswornfaction)
 		if chanceRoll(20)
-			return Shaved
+			return -1
 		Else
 			if chanceRoll(80)
-				return Hairy
+				return hairyArray
 			else
-				return Normal
+				return normalArray
 			endif
 		endif
 	else ; most NPCs
@@ -245,17 +288,17 @@ string[] Function GetHairType(Actor Npc)
 		int randomNum = Utility.RandomInt(1, 100)
 
 		if randomNum <= shavedProb
-			return Shaved
+			return -1
 		elseif randomNum <= normalProb
-			return Normal
+			return normalArray
 		elseif randomNum <= stylishProb
-			return Stylish
+			return stylishArray
 		elseif randomNum <= hairyProb
-			return Hairy
+			return hairyArray
 		endif
 
 		; a default if user messed up and chances don't sum up to 100
-		return Normal
+		return normalArray
 	endif
 EndFunction
 
@@ -268,16 +311,16 @@ EndFunction
 ;  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
-Function RemovePubes(actor Act)
+Function RemovePubes(actor Act, bool IsActFemale)
 	String Node = "Body [ovl" + GetNPCDataInt(Act, OPubesSlot) + "]"
 
-	NiOverride.AddNodeOverrideString(Act, true, Node, 9, 0, "actors\\character\\overlays\\default.dds", false)
-	NiOverride.RemoveNodeOverride(Act, true, node , 9, 0)
-	NiOverride.RemoveNodeOverride(Act, true, Node, 7, -1)
-	NiOverride.RemoveNodeOverride(Act, true, Node, 0, -1)
-	NiOverride.RemoveNodeOverride(Act, true, Node, 8, -1)
-	NiOverride.RemoveNodeOverride(Act, true, Node, 2, -1)
-	NiOverride.RemoveNodeOverride(Act, true, Node, 3, -1)
+	NiOverride.AddNodeOverrideString(Act, IsActFemale, Node, 9, 0, "actors\\character\\overlays\\default.dds", false)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, node , 9, 0)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, Node, 7, -1)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, Node, 0, -1)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, Node, 8, -1)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, Node, 2, -1)
+	NiOverride.RemoveNodeOverride(Act, IsActFemale, Node, 3, -1)
 
 	StoreNPCDataBool(act, OPubeskey, false)
 EndFunction
@@ -292,96 +335,43 @@ int Function GetLightHairColor(actor act)
 EndFunction
 
 
-Function ColorPubes(actor act, int color)
+Function ColorPubes(actor act, int color, bool isActFemale)
 	String Node = "Body" + " [ovl" + GetNPCDataInt(act, OPubesSlot) + "]"
 
-	NiOverride.AddNodeOverrideInt(act, true, Node, 7, -1, color, true)
+	NiOverride.AddNodeOverrideInt(act, isActFemale, Node, 7, -1, color, true)
 EndFunction
 
 
-Function ApplyOverlay(Actor akTarget, String TextureToApply)
-	int OverlaySlot = GetEmptySlot(aktarget, true, "Body")
+Function ApplyOverlay(Actor akTarget, String TextureToApply, bool isActFemale)
+	int OverlaySlot = GetEmptySlot(aktarget, isActFemale, "Body")
 	StoreNPCDataInt(akTarget, OPubesSlot, OverlaySlot)
 
 	String Node = "Body" + " [ovl" + OverlaySlot + "]"
 
-	NiOverride.AddNodeOverrideString(akTarget, true, Node, 9, 0, TextureToApply, true)
-	NiOverride.AddNodeOverrideInt(akTarget, true, Node, 7, -1, 0, true)
-    NiOverride.AddNodeOverrideInt(akTarget, true, Node, 0, -1, 0, true)
-    NiOverride.AddNodeOverrideFloat(akTarget, true, Node, 8, -1, 1.0, true)
-	NiOverride.AddNodeOverrideFloat(akTarget, true, Node, 2, -1, 0.0, true)
-	NiOverride.AddNodeOverrideFloat(akTarget, true, Node, 3, -1, 0.0, true)
-
-	NiOverride.AddOverlays(akTarget)
+	NiOverride.AddNodeOverrideString(akTarget, isActFemale, Node, 9, 0, TextureToApply, true)
+	NiOverride.AddNodeOverrideInt(akTarget, isActFemale, Node, 7, -1, 0, true)
+    NiOverride.AddNodeOverrideInt(akTarget, isActFemale, Node, 0, -1, 0, true)
+    NiOverride.AddNodeOverrideFloat(akTarget, isActFemale, Node, 8, -1, 1.0, true)
+	NiOverride.AddNodeOverrideFloat(akTarget, isActFemale, Node, 2, -1, 0.0, true)
+	NiOverride.AddNodeOverrideFloat(akTarget, isActFemale, Node, 3, -1, 0.0, true)
 
 	NiOverride.ApplyNodeOverrides(akTarget)
 EndFunction
 
 
-Function GeneratePubicHairLists()
-	string dir = "data/meshes/opubes"
-	string[] compatbilityFiles = MiscUtil.FilesInFolder(dir, extension = "json")
-
-	Console(compatbilityFiles.Length + " pubic hair compat files found")
-
-	int i = 0
-	int l = compatbilityFiles.Length
-
-	Shaved = Utility.ResizeStringArray(Shaved, 0, "")
-	Normal = Utility.ResizeStringArray(Normal, 0, "")
-	Stylish = Utility.ResizeStringArray(Stylish, 0, "")
-	Hairy = Utility.ResizeStringArray(Hairy, 0, "")
-
-	while i < l
-		int file = JValue.readFromFile(dir + "/" + compatbilityFiles[i])
-
-		string[] hairs = jmap.allKeysPArray(file)
-		Console(hairs.Length + " pubic hairs in " + compatbilityFiles[i])
-
-		int j = 0
-		int l2 = hairs.Length
-		while j < l2
-			if MiscUtil.FileExists(hairs[j])
-				string type = jmap.getStr(file, hairs[j])
-
-				if type == "stylish"
-					Stylish = PapyrusUtil.PushString(Stylish, hairs[j])
-				elseif type == "normal"
-					Normal = PapyrusUtil.PushString(Normal, hairs[j])
-				elseif type == "hairy"
-					Hairy = PapyrusUtil.PushString(Hairy, hairs[j])
-				else
-					Console("OPUBES ERROR: Type for hair " + hairs[j] + " not found: " + type)
-				endif
-			else
-				Console("OPubes - file not found: " + hairs[j])
-				Console("OPubes - Assuming that this pack is not installed and skipping")
-				j = l2
-			endif
-
-			j += 1
-		endwhile
-
-		i += 1
-	endwhile
-
-
-	Console("Hair counts:")
-
-	Console(">	Stylish: " + Stylish.Length)
-	Console(">	Normal: " + Normal.Length)
-	Console(">	Hairy: " + Hairy.Length)
-
-	TotalPubes = Hairy.Length + Normal.Length + Stylish.Length
-
-	Console(">	Total: " + TotalPubes)
-EndFunction
-
-
 Int Function GetEmptySlot(Actor akTarget, Bool Gender, String Area)
+	String TexPath
+
+	if SlotToUse > 0
+		TexPath = NiOverride.GetNodeOverrideString(akTarget, Gender, Area + " [ovl" + SlotToUse + "]", 9, 0)
+
+		If TexPath == "" || TexPath == "actors\\character\\overlays\\default.dds"
+			Return SlotToUse
+		EndIf
+	endif
+
 	Int i = 0
 	Int NumSlots = NiOverride.GetNumBodyOverlays()
-	String TexPath
 	Bool FirstPass = true
 
 	While i < NumSlots
@@ -395,6 +385,7 @@ Int Function GetEmptySlot(Actor akTarget, Bool Gender, String Area)
 			i = 0
 		EndIf
 	EndWhile
+
 	Return -1
 EndFunction
 
@@ -446,4 +437,115 @@ EndFunction
 
 Bool Function IsFemale(Actor Act)
 	return Act.GetLeveledActorBase().GetSex() == 1
+EndFunction
+
+
+Function GeneratePubicHairLists()
+	ClearJArrays()
+
+	Normal = JArray.object()
+	JValue.retain(Normal, "OPubesNormal")
+
+	Stylish = JArray.object()
+	JValue.retain(Stylish, "OPubesStylish")
+
+	Hairy = JArray.object()
+	JValue.retain(Hairy, "OPubesHairy")
+
+	; Parse female pubes
+	ParseJSONFiles("data/meshes/opubes", Normal, Stylish, Hairy)
+
+	int FemaleTotalNormal = JArray.count(Normal)
+	int FemaleTotalStylish = JArray.count(Stylish)
+	int FemaleTotalHairy = JArray.count(Hairy)
+
+	TotalPubesFemale = FemaleTotalNormal + FemaleTotalStylish + FemaleTotalHairy
+
+	TotalPubesMale = 0
+
+	; Parse male pubes
+	if EnableMales
+		NormalMale = JArray.object()
+		JValue.retain(NormalMale, "OPubesNormalMale")
+
+		StylishMale = JArray.object()
+		JValue.retain(StylishMale, "OPubesStylishMale")
+
+		HairyMale = JArray.object()
+		JValue.retain(HairyMale, "OPubesHairyMale")
+
+		ParseJSONFiles("data/meshes/opubes/male", NormalMale, StylishMale, HairyMale)
+
+		int MaleTotalNormal = JArray.count(NormalMale)
+		int MaleTotalStylish = JArray.count(StylishMale)
+		int MaleTotalHairy = JArray.count(HairyMale)
+
+		TotalPubesMale = MaleTotalNormal + MaleTotalStylish + MaleTotalHairy
+	endif
+
+	Console("Hair counts:")
+
+	Console(">	Total Pubes Female: " + TotalPubesFemale)
+	Console(">	Total Pubes Male: " + TotalPubesMale)
+EndFunction
+
+
+Function ParseJSONFiles(String dir, int normalArray, int stylishArray, int hairyArray)
+	string[] compatbilityFiles = MiscUtil.FilesInFolder(dir, extension = "json")
+
+	Console(compatbilityFiles.Length + " pubic hair compat files found")
+
+	int i = 0
+	int l = compatbilityFiles.Length
+
+	while i < l
+		int file = JValue.readFromFile(dir + "/" + compatbilityFiles[i])
+
+		string[] hairs = jmap.allKeysPArray(file)
+		Console(hairs.Length + " pubic hairs in " + compatbilityFiles[i])
+
+		int j = 0
+		int l2 = hairs.Length
+		while j < l2
+			if MiscUtil.FileExists(hairs[j])
+				string type = jmap.getStr(file, hairs[j])
+
+				if type == "stylish"
+					JArray.addStr(stylishArray, hairs[j])
+				elseif type == "normal"
+					JArray.addStr(normalArray, hairs[j])
+				elseif type == "hairy"
+					JArray.addStr(hairyArray, hairs[j])
+				else
+					Console("OPUBES ERROR: Type for hair " + hairs[j] + " not found: " + type)
+				endif
+			else
+				Console("OPubes - file not found: " + hairs[j])
+				Console("OPubes - Assuming that this pack is not installed and skipping")
+				j = l2
+			endif
+
+			j += 1
+		endwhile
+
+		i += 1
+	endwhile
+EndFunction
+
+Function ClearJArrays()
+	JArray.Clear(Normal)
+	JArray.Clear(Stylish)
+	JArray.Clear(Hairy)
+
+	JArray.Clear(NormalMale)
+	JArray.Clear(StylishMale)
+	JArray.Clear(HairyMale)
+
+	JValue.Release(Normal)
+	JValue.Release(Stylish)
+	JValue.Release(Hairy)
+
+	JValue.Release(NormalMale)
+	JValue.Release(StylishMale)
+	JValue.Release(HairyMale)
 EndFunction
