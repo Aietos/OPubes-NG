@@ -1,47 +1,47 @@
 # OPubes
 
- 
-Addon for OBody that distributes female pubic hair textures from a number of packs. You can easily create patches in the form of JSON files too.
+Distributes female and male pubic hair textures from a number of packs. You can easily create patches in the form of JSON files too.
 
-Download the entire repo to desktop then take "OPubes download me to install in mo.zip" and feed it into your mod organizer
+## Building
 
-This mod is licensed under GPL-3. This mod may of course be forked and continued. If uploaded to Nexus, out of respect towards my creative & time investment I kindly ask that you point 75% of the DP it earns to my Nexus account (Sairion350). 
+### Requirements
+- [xmake](https://xmake.io/)
+- [Pyro](https://github.com/fireundubh/pyro/releases) (download a release and unzip it anywhere you want on your computer)
+- [Skyrim SE Creation Kit](https://store.steampowered.com/app/1946180/Skyrim_Special_Edition_Creation_Kit/) so you have the Papyrus Compiler. Don't forget to unzip the `Scripts.zip` folder it comes with, which is put inside your Skyrim Data folder
 
+### Setup
+- Clone this repository
+- Open the terminal, switch into the repository's folder and fetch submodules: `git submodule update --init --recursive`
+- In the `pyro.config.json` file of this repository, set the `pyro_path` to where `pyro.exe` that you downloaded above resides. `game_path` is optional, you should only need to set it if Pyro has trouble finding the game folder. Don't commit changes to this file. Example of how `pyro.config.json` may look like:
+```json
+{
+  "pyro_path": "C:\\Skyrim Projects\\pyro-master-1656807840\\pyro.exe",
+  "game_path": ""
+}
+```
+- Generate a Github personal access token with `public_repo` access scope and create a `.secrets` file in the same folder where `pyro.exe` resides. This is needed for Pyro to fetch the OPubes Papyrus dependencies that reside in Github repositories. For more information, see [Pyro Remotes](https://wiki.fireundubh.com/pyro/remotes). The `.secrets` file should look something like this:
+```ini
+[github.com]
+access_token = your_access_token
+```
 
-Desc
+From here you have several options depending on what you're looking to do:
+- `xmake papyrus` - compiles only the Papyrus scripts
+- `xmake build` - builds only the DLL and PDB files
+- `xmake dist --skip-dll` - compile only the Papyrus scripts and make `.zip` package to install with mod manager. It will reuse an already existing DLL file if there is any
+- `xmake dist --skip-papyrus` - compile only the DLL, skipping Papyrus scripts compilation, and make `.zip` package to install with mod manager. It will reuse the already existing compiled `.pex` scripts for the `.zip` package
+- `xmake dist` - builds the entire project (compile Papyrus scripts + compile DLL + make .zip package to install with mod manager)
 
+The `.zip` package created by `xmake dist` commands will be created in `contrib\Artifact`.
 
+For most cases or if you are unsure, `xmake dist` is what you should be using, since it does all the work and necessary packaging for you.
 
-After many delays, OPubes is finally here.
+You can compile the Papyrus scripts in the Creation Kit if you want to. However, Pyro is preferred since it anonymizes scripts properly (Papyrus compiler includes metadata in the compiled scripts that may have information about your computer and Windows username). Besides that, Pyro is also much faster and lightweight.
 
-OPubes collects pubic hair textures from disk and categorizes them into 3 groups (hairy, normal, stylized) and then hooks into OBody to distribute them based on an algorithm.
+If you use CLion, generate `cmakelists.txt` with `xmake project -k cmakelists` (`build.ps1` does it for you), and run it again when you add new files or headers to the project. The file has absolute paths to your local xmake packages, so it's not committed.
 
+## Versioning and Git builds
 
-2D Overlays
-OPubes pubes are 2D. 3D pubic hairs for SoS exist, but these 2D textures have a few advantages:
-- better compatibility
-- more variety
+OPubes uses semantic versioning. When making a PR, upgrade the version in `xmake.lua` and `opubes.ppj` taking into account whether it should be a patch, minor or major version upgrade.
 
-With both default pubic hair packs installed, OPubes has a pool of 30 different textures it can use.
-Uses external textures
-OPubes grabs textures from pubic hair packs you have installed. It does this with simple compatibility JSON files. OPubes ships with compatiblity with 2 known pubic hair texture packs, and you must download these separately from their original pages (links on DL page). You can easily add support for other packs by copying the OPubes json file and editing them.
-
-Smart application rules
-OPubes follows a couple of rules for deciding who gets what kind of pubic hair setup. Firstly, around a third of NPCs will be completely shaved. Then, bandits, forsworn, and orcs are given an extra large chance of getting really overgrown pubic hair. Vampires and the like have an extra high chance of stylized pubic hair. Everyone else has a more balanced chance of getting either "normal" or "overgrown" sets, with a rare chance of getting a "stylized" texture.
-
-Works with OBody for the best experience
-OPubes uses OBody's skse to work without cloak spells or any spells at all. It's designed to be as high performance as possible.
-
-Additionally, a new texture is chosen when you manually do an OBody application.
-
-Recoloring
-OPubes will sometimes slightly tint the textures to match the NPC's hair when possible
-
-Player
-The player is skipped by OPubes, you can manually set your pube texture in racemenu's body overlays area
-
-Requirements
-OPubes does not ship with any textures. You must download an overlay texture set. Links to all supported sets are available on the download page
-OPubes requires OBody
-
-Make sure you aren't using a skin texture with pubes painted on them, obviously.
+Failing to upgrade version means that the Git CI build automatic release will fail, because there was already a version built with the current version number.

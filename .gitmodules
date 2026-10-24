@@ -1,0 +1,7 @@
+[submodule "lib/commonlibsse-ng"]
+	path = lib/commonlibsse-ng
+	url = https://github.com/alandtse/CommonLibSSE-NG.git
+	branch = ng
+[submodule "lib/bcdec"]
+	path = lib/bcdec
+	url = https://github.com/iOrange/bcdec.git
