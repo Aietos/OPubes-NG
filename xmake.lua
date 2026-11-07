@@ -7,7 +7,7 @@ includes("xmake/tasks.lua")
 
 -- set project
 set_project("OPubes")
-set_version("3.0.0")
+set_version("3.0.1")
 set_license("GPL-3.0")
 
 -- set defaults
